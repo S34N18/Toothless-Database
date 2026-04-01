@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Alice",
+    "role": "engineer",
+    "level": 3,
+    "id": "70c082fa-7164-457f-ae60-c6dc4f5286c8"
+  },
+  {
+    "name": "Bob",
+    "role": "senior designer",
+    "level": 4,
+    "id": "76a3c80e-7db4-4780-a607-4d3dfe32dd5c"
+  }
+]
