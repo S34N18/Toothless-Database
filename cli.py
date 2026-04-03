@@ -1,23 +1,20 @@
 """
-cli.py — interactive command-line interface for FileDatabase
-
-Usage:
-    python cli.py             (uses db.json by default)
-    python cli.py mydata.json (use a custom file)
+cli.py  (v4 — hybrid database)
 
 Commands:
-    INSERT field=value field=value ...
+    INSERT field=value [field=value ...]
     SELECT *
-    SELECT WHERE field=value [field=value ...]
+    SELECT WHERE field=value [field=value ...] [ORDER BY field] [DESC] [LIMIT n] [OFFSET n]
     SELECT id <record_id>
     UPDATE <id> field=value [field=value ...]
     DELETE <id>
     COUNT
     CLEAR
     INDEXES
+    SCHEMA
     REBUILD
     HELP
-    EXIT  (or QUIT)
+    EXIT / QUIT
 """
 
 import sys
@@ -25,21 +22,18 @@ import shlex
 from file_database import FileDatabase
 
 
-# ------------------------------------------------------------------ #
-# Pretty-printing helpers
-# ------------------------------------------------------------------ #
-
-def _hr(char: str = "─", width: int = 60) -> str:
+def _hr(char="─", width=60):
     return char * width
 
 
-def _print_record(record: dict, indent: int = 2) -> None:
+def _print_record(record: dict, indent=2) -> None:
     pad = " " * indent
-    id_val = record.get("id", "?")
-    fields = {k: v for k, v in record.items() if k != "id"}
-    print(f"{pad}id  : {id_val}")
-    for k, v in fields.items():
-        print(f"{pad}{k:<10}: {v}")
+    print(f"{pad}id         : {record.get('id', '?')}")
+    print(f"{pad}created_at : {record.get('created_at', '?')}")
+    for k, v in record.items():
+        if k in ("id", "created_at"):
+            continue
+        print(f"{pad}{k:<12}: {v}")
 
 
 def _print_records(records: list[dict]) -> None:
@@ -53,11 +47,6 @@ def _print_records(records: list[dict]) -> None:
     print(f"\n  {len(records)} record(s) found.")
 
 
-# ------------------------------------------------------------------ #
-# Value coercion
-# Tries int, then float, then leaves as string.
-# ------------------------------------------------------------------ #
-
 def _coerce(value: str):
     try:
         return int(value)
@@ -70,15 +59,7 @@ def _coerce(value: str):
     return value
 
 
-# ------------------------------------------------------------------ #
-# Parse  field=value  pairs from a list of tokens
-# ------------------------------------------------------------------ #
-
 def _parse_pairs(tokens: list[str]) -> dict:
-    """
-    Turn ["name=Alice", "level=3"] into {"name": "Alice", "level": 3}.
-    Raises ValueError if any token is not in field=value form.
-    """
     result = {}
     for token in tokens:
         if "=" not in token:
@@ -92,11 +73,9 @@ def _parse_pairs(tokens: list[str]) -> dict:
 # Command handlers
 # ------------------------------------------------------------------ #
 
-def cmd_insert(db: FileDatabase, tokens: list[str]) -> None:
-    """INSERT field=value [field=value ...]"""
+def cmd_insert(db, tokens):
     if not tokens:
         print("  Error: INSERT needs at least one field=value pair.")
-        print("  Example: INSERT name=Alice role=engineer")
         return
     try:
         record = _parse_pairs(tokens)
@@ -104,22 +83,26 @@ def cmd_insert(db: FileDatabase, tokens: list[str]) -> None:
         print(f"  Error: {e}")
         return
     result = db.insert(record)
-    print(f"  Inserted 1 record.")
+    print("  Inserted:")
     _print_record(result)
 
 
-def cmd_select(db: FileDatabase, tokens: list[str]) -> None:
+def cmd_select(db, tokens):
     """
     SELECT *
-    SELECT WHERE field=value [field=value ...]
-    SELECT id <record_id>
+    SELECT id <id>
+    SELECT WHERE f=v [f=v ...] [ORDER BY field] [DESC] [LIMIT n] [OFFSET n]
     """
     if not tokens or tokens[0] == "*":
-        records = db.read()
+        # Check for ORDER BY / LIMIT / OFFSET after *
+        rest = tokens[1:] if tokens else []
+        order_by, descending, limit, offset = _parse_select_opts(rest)
+        records = db.read(order_by=order_by, descending=descending,
+                          limit=limit, offset=offset)
         _print_records(records)
         return
 
-    if tokens[0].upper() == "ID" and len(tokens) == 2:
+    if tokens[0].upper() == "ID" and len(tokens) >= 2:
         record = db.read(record_id=tokens[1])
         if record:
             _print_record(record)
@@ -128,24 +111,75 @@ def cmd_select(db: FileDatabase, tokens: list[str]) -> None:
         return
 
     if tokens[0].upper() == "WHERE":
+        # Split filter tokens from ORDER BY / LIMIT / OFFSET
+        filter_tokens, opt_tokens = _split_select_tokens(tokens[1:])
         try:
-            filters = _parse_pairs(tokens[1:])
+            filters = _parse_pairs(filter_tokens)
         except ValueError as e:
             print(f"  Error: {e}")
             return
-        records = db.read(filters=filters)
+        order_by, descending, limit, offset = _parse_select_opts(opt_tokens)
+        records = db.read(filters=filters, order_by=order_by,
+                          descending=descending, limit=limit, offset=offset)
         _print_records(records)
         return
 
     print("  Error: Unknown SELECT syntax.")
-    print("  Use: SELECT *  |  SELECT WHERE field=value  |  SELECT id <id>")
+    print("  Use: SELECT *  |  SELECT WHERE f=v [ORDER BY f] [DESC] [LIMIT n] [OFFSET n]  |  SELECT id <id>")
 
 
-def cmd_update(db: FileDatabase, tokens: list[str]) -> None:
-    """UPDATE <id> field=value [field=value ...]"""
+def _split_select_tokens(tokens: list[str]):
+    """Split WHERE field tokens from ORDER BY / LIMIT / OFFSET tokens."""
+    keywords = {"ORDER", "LIMIT", "OFFSET"}
+    for i, t in enumerate(tokens):
+        if t.upper() in keywords:
+            return tokens[:i], tokens[i:]
+    return tokens, []
+
+
+def _parse_select_opts(tokens: list[str]):
+    """Parse ORDER BY field [DESC] LIMIT n OFFSET n from token list."""
+    order_by   = None
+    descending = False
+    limit      = None
+    offset     = 0
+
+    i = 0
+    while i < len(tokens):
+        t = tokens[i].upper()
+        if t == "ORDER" and i + 1 < len(tokens) and tokens[i+1].upper() == "BY":
+            if i + 2 < len(tokens):
+                order_by = tokens[i+2]
+                i += 3
+                if i < len(tokens) and tokens[i].upper() == "DESC":
+                    descending = True
+                    i += 1
+            else:
+                i += 2
+        elif t == "DESC":
+            descending = True
+            i += 1
+        elif t == "LIMIT" and i + 1 < len(tokens):
+            try:
+                limit = int(tokens[i+1])
+            except ValueError:
+                pass
+            i += 2
+        elif t == "OFFSET" and i + 1 < len(tokens):
+            try:
+                offset = int(tokens[i+1])
+            except ValueError:
+                pass
+            i += 2
+        else:
+            i += 1
+
+    return order_by, descending, limit, offset
+
+
+def cmd_update(db, tokens):
     if len(tokens) < 2:
         print("  Error: UPDATE needs an id and at least one field=value pair.")
-        print("  Example: UPDATE abc-123 role=manager")
         return
     record_id = tokens[0]
     try:
@@ -155,101 +189,83 @@ def cmd_update(db: FileDatabase, tokens: list[str]) -> None:
         return
     result = db.update(record_id, changes)
     if result:
-        print("  Updated successfully:")
+        print("  Updated:")
         _print_record(result)
     else:
         print(f"  No record with id={record_id!r}")
 
 
-def cmd_delete(db: FileDatabase, tokens: list[str]) -> None:
-    """DELETE <id>"""
+def cmd_delete(db, tokens):
     if not tokens:
         print("  Error: DELETE needs a record id.")
-        print("  Example: DELETE abc-123")
         return
-    record_id = tokens[0]
-    ok = db.delete(record_id)
+    ok = db.delete(tokens[0])
     if ok:
-        print(f"  Deleted record id={record_id!r}")
+        print(f"  Deleted record id={tokens[0]!r}")
     else:
-        print(f"  No record with id={record_id!r}")
+        print(f"  No record with id={tokens[0]!r}")
 
 
-def cmd_count(db: FileDatabase) -> None:
-    n = db.count()
-    print(f"  {n} record(s) in database.")
-
-
-def cmd_clear(db: FileDatabase) -> None:
-    confirm = input("  Type YES to wipe all records and the index: ").strip()
+def cmd_clear(db):
+    confirm = input("  Type YES to wipe all records: ").strip()
     if confirm == "YES":
         db.clear()
-        print("  Database cleared.")
     else:
         print("  Aborted.")
 
 
-def cmd_indexes(db: FileDatabase) -> None:
-    db.index_stats()
-
-
-def cmd_rebuild(db: FileDatabase) -> None:
-    db.rebuild_index()
-
-
-def cmd_help() -> None:
+def cmd_help():
     print(f"""
   {_hr()}
   Commands
   {_hr()}
   INSERT field=value [field=value ...]
-      Add a new record. Fields can be any name/value pairs.
-      Example: INSERT name=Alice role=engineer level=3
+      Add a record. Core schema fields → real columns. Others → blob.
+      Example: INSERT name=Alice role=engineer level=3 country=Kenya
 
-  SELECT *
-      Show all records.
+  SELECT *  [ORDER BY field] [DESC] [LIMIT n] [OFFSET n]
+      Return all records, optionally sorted and paginated.
+      Example: SELECT * ORDER BY level DESC LIMIT 5
 
-  SELECT WHERE field=value [field=value ...]
-      Filter records. Uses the index when available.
-      Example: SELECT WHERE role=engineer
-      Example: SELECT WHERE role=engineer level=3
+  SELECT WHERE field=value [field=value ...] [ORDER BY field] [DESC] [LIMIT n] [OFFSET n]
+      Filter records. Core fields use native SQL; blob fields use index.
+      Example: SELECT WHERE role=engineer ORDER BY level DESC
+      Example: SELECT WHERE country=Kenya LIMIT 10 OFFSET 20
 
   SELECT id <record_id>
-      Fetch one record by its id.
+      Fetch one record by ID.
 
   UPDATE <id> field=value [field=value ...]
-      Change fields on a record. Only listed fields are overwritten.
-      Example: UPDATE abc-123 role=manager level=5
+      Overwrite specific fields. Others are untouched.
+      Example: UPDATE abc-123 level=5 country=Uganda
 
-  DELETE <id>
-      Remove a record permanently.
-      Example: DELETE abc-123
-
-  COUNT     Show total number of records.
-  CLEAR     Wipe all records and the index (asks for confirmation).
-  INDEXES   Show a summary of the current index.
-  REBUILD   Rebuild the index from scratch (use if index seems wrong).
-  HELP      Show this message.
-  EXIT      Quit. (QUIT also works.)
+  DELETE <id>        Remove a record.
+  COUNT              Total number of records.
+  CLEAR              Wipe everything (asks for confirmation).
+  INDEXES            Show index summary (core + blob).
+  SCHEMA             Show table column layout.
+  REBUILD            Rebuild blob field_index from scratch.
+  HELP               Show this message.
+  EXIT / QUIT        Close the CLI.
   {_hr()}
   Notes
   {_hr()}
-  - Values that look like numbers are stored as numbers (3, not "3").
-  - Use underscores for values with spaces: role=senior_engineer
-    then query them back as: SELECT WHERE role=senior_engineer
-  - IDs are UUIDs — copy them from SELECT output for UPDATE/DELETE.
+  - Core schema fields are fast: native SQL, ORDER BY, ranges work.
+  - Blob fields are flexible: any name, indexed via field_index.
+  - Numbers are auto-detected: level=3 stores integer 3.
+  - Quoted values: INSERT name="Alice Smith" (shlex handles it).
+  - created_at is set automatically — you can ORDER BY it.
   {_hr()}""")
 
 
 # ------------------------------------------------------------------ #
-# Main REPL
+# REPL
 # ------------------------------------------------------------------ #
 
 def run(db: FileDatabase) -> None:
-    db_name = db.filepath
     count = db.count()
     print(_hr("═"))
-    print(f"  FileDatabase CLI  —  {db_name}  ({count} records)")
+    print(f"  FileDatabase v4  —  {db.filepath}  ({count} records)")
     print(f"  Type HELP for commands, EXIT to quit.")
     print(_hr("═"))
 
@@ -263,7 +279,6 @@ def run(db: FileDatabase) -> None:
         if not raw:
             continue
 
-        # shlex.split handles quoted strings like name="Alice Smith"
         try:
             parts = shlex.split(raw)
         except ValueError as e:
@@ -272,8 +287,7 @@ def run(db: FileDatabase) -> None:
 
         command = parts[0].upper()
         tokens  = parts[1:]
-
-        print()  # breathing room before output
+        print()
 
         if command == "INSERT":
             cmd_insert(db, tokens)
@@ -284,32 +298,23 @@ def run(db: FileDatabase) -> None:
         elif command == "DELETE":
             cmd_delete(db, tokens)
         elif command == "COUNT":
-            cmd_count(db)
+            print(f"  {db.count()} record(s).")
         elif command == "CLEAR":
             cmd_clear(db)
         elif command == "INDEXES":
-            cmd_indexes(db)
+            db.index_stats()
+        elif command == "SCHEMA":
+            db.schema_info()
         elif command == "REBUILD":
-            cmd_rebuild(db)
+            db.rebuild_index()
         elif command == "HELP":
             cmd_help()
-        elif command == "SCHEMA":
-            if db.schema:
-                print("  Active schema:")
-                for field, typ in db.schema.items():
-                    print(f"    {field:<16} {typ.__name__}")
-            else:
-                print("  No schema defined (any fields accepted).")
         elif command in ("EXIT", "QUIT"):
             print("  Goodbye.")
             break
         else:
-            print(f"  Unknown command: {command!r}. Type HELP to see all commands.")
+            print(f"  Unknown command: {command!r}. Type HELP.")
 
-
-# ------------------------------------------------------------------ #
-# Entry point
-# ------------------------------------------------------------------ #
 
 if __name__ == "__main__":
     filepath = sys.argv[1] if len(sys.argv) > 1 else "db.sqlite"
