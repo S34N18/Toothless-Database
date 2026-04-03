@@ -293,6 +293,13 @@ def run(db: FileDatabase) -> None:
             cmd_rebuild(db)
         elif command == "HELP":
             cmd_help()
+        elif command == "SCHEMA":
+            if db.schema:
+                print("  Active schema:")
+                for field, typ in db.schema.items():
+                    print(f"    {field:<16} {typ.__name__}")
+            else:
+                print("  No schema defined (any fields accepted).")
         elif command in ("EXIT", "QUIT"):
             print("  Goodbye.")
             break
@@ -305,6 +312,6 @@ def run(db: FileDatabase) -> None:
 # ------------------------------------------------------------------ #
 
 if __name__ == "__main__":
-    filepath = sys.argv[1] if len(sys.argv) > 1 else "db.json"
+    filepath = sys.argv[1] if len(sys.argv) > 1 else "db.sqlite"
     db = FileDatabase(filepath)
     run(db)
