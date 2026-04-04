@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FileDatabase — {% block title %}{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sidebar-w: 220px;
+      --bg:        #0f0f0f;
+      --surface:   #171717;
+      --surface2:  #1f1f1f;
+      --border:    #2a2a2a;
+      --border2:   #333;
+      --text:      #e8e8e2;
+      --muted:     #666;
+      --accent:    #c8f060;
+      --accent-d:  #9abe3a;
+      --danger:    #f06060;
+      --info:      #60a8f0;
+      --warn:      #f0c060;
+      --success:   #60d090;
+      --font-sans: 'IBM Plex Sans', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+      --radius:    6px;
+      --radius-lg: 10px;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-logo {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-logo .db-name {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-logo .wordmark {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+
+    .sidebar-logo .wordmark span { color: var(--muted); }
+
+    .nav { padding: 12px 0; flex: 1; }
+
+    .nav-label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      padding: 8px 20px 4px;
+      text-transform: uppercase;
+    }
+
+    .nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 20px;
+      color: #888;
+      text-decoration: none;
+      font-size: 13px;
+      transition: color 0.15s, background 0.15s;
+      border-left: 2px solid transparent;
+    }
+
+    .nav a:hover { color: var(--text); background: var(--surface2); }
+
+    .nav a.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: rgba(200,240,96,0.05);
+    }
+
+    .nav-icon {
+      width: 16px;
+      height: 16px;
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+
+    .sidebar-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── main ── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .topbar {
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-title {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .topbar-sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .content { padding: 28px; flex: 1; }
+
+    /* ── flash messages ── */
+    .flash-list { margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px; }
+
+    .flash {
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      border: 1px solid;
+    }
+
+    .flash.success { background: rgba(96,208,144,0.08); border-color: rgba(96,208,144,0.3); color: var(--success); }
+    .flash.error   { background: rgba(240,96,96,0.08);  border-color: rgba(240,96,96,0.3);  color: var(--danger); }
+
+    /* ── buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      border: 1px solid;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0f0f0f;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover { background: var(--accent-d); border-color: var(--accent-d); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border-color: var(--border2);
+    }
+    .btn-ghost:hover { color: var(--text); border-color: #555; background: var(--surface2); }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border-color: rgba(240,96,96,0.3);
+      font-size: 12px;
+      padding: 5px 10px;
+    }
+    .btn-danger:hover { background: rgba(240,96,96,0.1); }
+
+    .btn-edit {
+      background: transparent;
+      color: var(--info);
+      border-color: rgba(96,168,240,0.3);
+      font-size: 12px;
+      padding: 5px 10px;
+    }
+    .btn-edit:hover { background: rgba(96,168,240,0.1); }
+
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    /* ── forms ── */
+    .form-group { margin-bottom: 20px; }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-control {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      resize: vertical;
+    }
+
+    .form-control:focus { border-color: var(--accent); }
+    .form-hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+    input.form-control { height: 40px; resize: none; }
+
+    /* ── table ── */
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead tr {
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border2);
+    }
+
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      white-space: nowrap;
+    }
+
+    th a { color: var(--muted); text-decoration: none; }
+    th a:hover { color: var(--accent); }
+    th.sorted a { color: var(--accent); }
+
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--surface2); }
+
+    .td-id {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .td-ts {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .td-num {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--accent);
+    }
+
+    .td-actions { white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+
+    /* ── search bar ── */
+    .search-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .search-bar input {
+      height: 36px;
+      font-size: 13px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font-mono);
+      padding: 0 12px;
+      outline: none;
+    }
+
+    .search-bar input:focus { border-color: var(--accent); }
+    .search-bar input.field-input { width: 140px; }
+    .search-bar input.value-input { width: 200px; }
+    .search-bar .sep { color: var(--muted); font-family: var(--font-mono); }
+
+    /* ── pagination ── */
+    .pagination {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 20px;
+      font-size: 13px;
+    }
+
+    .pagination a, .pagination span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      text-decoration: none;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      transition: all 0.15s;
+    }
+
+    .pagination a:hover { color: var(--text); border-color: #555; }
+    .pagination span.current { background: var(--accent); color: #0f0f0f; border-color: var(--accent); font-weight: 500; }
+    .pagination .pg-info { width: auto; padding: 0 12px; border: none; color: var(--muted); font-size: 12px; }
+
+    /* ── stats row ── */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      min-width: 120px;
+    }
+
+    .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.07em; }
+    .stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--accent); }
+
+    /* ── schema page ── */
+    .schema-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 700px) { .schema-col { grid-template-columns: 1fr; } }
+
+    .schema-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .schema-table th { font-size: 11px; color: var(--muted); padding: 6px 12px; text-align: left; border-bottom: 1px solid var(--border); font-family: var(--font-mono); }
+    .schema-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 12px; }
+    .schema-table tr:last-child td { border-bottom: none; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 500;
+      font-family: var(--font-mono);
+    }
+
+    .tag-core    { background: rgba(200,240,96,0.1);  color: var(--accent); }
+    .tag-blob    { background: rgba(96,168,240,0.1);  color: var(--info); }
+    .tag-fixed   { background: rgba(102,102,102,0.15); color: var(--muted); }
+
+    .empty-state {
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty-state .big { font-size: 40px; margin-bottom: 12px; font-family: var(--font-mono); }
+    .empty-state p { font-size: 14px; margin-bottom: 20px; }
+
+    /* delete confirm modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      max-width: 380px;
+      width: 90%;
+    }
+    .modal h3 { font-size: 15px; margin-bottom: 8px; }
+    .modal p  { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="db-name">{{ db_path }}</div>
+    <div class="wordmark">file<span>db</span></div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-label">Browse</div>
+    <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' }}">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="3" width="12" height="2" rx="1"/>
+        <rect x="2" y="7" width="12" height="2" rx="1"/>
+        <rect x="2" y="11" width="8"  height="2" rx="1"/>
+      </svg>
+      Records
+    </a>
+    <a href="{{ url_for('insert') }}" class="{{ 'active' if request.endpoint == 'insert' }}">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="6"/>
+        <line x1="8" y1="5" x2="8" y2="11"/>
+        <line x1="5" y1="8" x2="11" y2="8"/>
+      </svg>
+      Insert
+    </a>
+    <div class="nav-label">Inspect</div>
+    <a href="{{ url_for('schema') }}" class="{{ 'active' if request.endpoint == 'schema' }}">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="2" width="5" height="5" rx="1"/>
+        <rect x="9" y="2" width="5" height="5" rx="1"/>
+        <rect x="2" y="9" width="5" height="5" rx="1"/>
+        <rect x="9" y="9" width="5" height="5" rx="1"/>
+      </svg>
+      Schema
+    </a>
+    <a href="{{ url_for('api_records') }}" target="_blank">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polyline points="4,6 2,8 4,10"/>
+        <polyline points="12,6 14,8 12,10"/>
+        <line x1="9" y1="4" x2="7" y2="12"/>
+      </svg>
+      JSON API ↗
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">v4 · hybrid</div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">{% block topbar_title %}FileDatabase{% endblock %}</div>
+      <div class="topbar-sub">{% block topbar_sub %}{% endblock %}</div>
+    </div>
+    {% block topbar_actions %}{% endblock %}
+  </div>
+
+  <div class="content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-list">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+<!-- delete modal -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3>Delete record?</h3>
+    <p id="deleteModalId"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <form id="deleteForm" method="POST">
+        <button type="submit" class="btn btn-danger">Delete</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function confirmDelete(id, shortId) {
+  document.getElementById('deleteModalId').textContent = 'Record ' + shortId + '… will be permanently removed.';
+  document.getElementById('deleteForm').action = '/delete/' + id;
+  document.getElementById('deleteModal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('deleteModal').classList.remove('open');
+}
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+</script>
+
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

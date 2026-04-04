@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Records{% endblock %}
+{% block topbar_title %}Records{% endblock %}
+{% block topbar_sub %}{{ total }} total{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('insert') }}" class="btn btn-primary btn-sm">+ Insert</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">Total records</div>
+    <div class="stat-value">{{ total }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Page</div>
+    <div class="stat-value">{{ page }} / {{ total_pages }}</div>
+  </div>
+  {% if core_cols %}
+  <div class="stat-card">
+    <div class="stat-label">Core columns</div>
+    <div class="stat-value" style="font-size:14px;padding-top:4px;">
+      {% for c in core_cols %}<span class="tag tag-core" style="margin-right:4px">{{ c }}</span>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- search -->
+<form class="search-bar" method="GET">
+  <input class="field-input" name="field"  placeholder="field"  value="{{ search_field }}" autocomplete="off">
+  <span class="sep">=</span>
+  <input class="value-input" name="value"  placeholder="value"  value="{{ search_value }}" autocomplete="off">
+  <button type="submit" class="btn btn-ghost btn-sm">Filter</button>
+  {% if search_field %}
+    <a href="{{ url_for('index') }}" class="btn btn-ghost btn-sm">Clear</a>
+  {% endif %}
+  <input type="hidden" name="order_by" value="{{ order_by }}">
+  <input type="hidden" name="desc"     value="{{ '1' if descending else '0' }}">
+</form>
+
+{% if records %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>
+          {% set next_desc = '0' if (order_by == 'id' and descending) else '1' %}
+          <a href="{{ url_for('index', order_by='id', desc=next_desc, field=search_field, value=search_value) }}">id</a>
+        </th>
+        {% for col in col_keys %}
+        <th class="{{ 'sorted' if order_by == col }}">
+          {% set next_desc = '0' if (order_by == col and descending) else '1' %}
+          <a href="{{ url_for('index', order_by=col, desc=next_desc, field=search_field, value=search_value) }}">
+            {{ col }}{% if order_by == col %} {{ '↓' if descending else '↑' }}{% endif %}
+          </a>
+        </th>
+        {% endfor %}
+        <th>
+          {% set next_desc = '0' if (order_by == 'created_at' and descending) else '1' %}
+          <a href="{{ url_for('index', order_by='created_at', desc=next_desc, field=search_field, value=search_value) }}">
+            created_at{% if order_by == 'created_at' %} {{ '↓' if descending else '↑' }}{% endif %}
+          </a>
+        </th>
+        <th>actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td class="td-id" title="{{ r.id }}">{{ r.id[:8] }}…</td>
+        {% for col in col_keys %}
+          {% set v = r.get(col, '') %}
+          {% if v is number %}
+            <td class="td-num">{{ v }}</td>
+          {% else %}
+            <td title="{{ v }}">{{ v }}</td>
+          {% endif %}
+        {% endfor %}
+        <td class="td-ts">{{ r.created_at[:19].replace('T',' ') if r.created_at else '—' }}</td>
+        <td>
+          <div class="td-actions">
+            <a href="{{ url_for('edit', record_id=r.id) }}" class="btn btn-edit">Edit</a>
+            <button class="btn btn-danger" onclick="confirmDelete('{{ r.id }}', '{{ r.id[:8] }}')">Del</button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+    <a href="{{ url_for('index', page=page-1, order_by=order_by, desc='1' if descending else '0', field=search_field, value=search_value) }}">‹</a>
+  {% endif %}
+  {% for p in range(1, total_pages + 1) %}
+    {% if p == page %}
+      <span class="current">{{ p }}</span>
+    {% elif p <= 3 or p >= total_pages - 1 or (p >= page - 1 and p <= page + 1) %}
+      <a href="{{ url_for('index', page=p, order_by=order_by, desc='1' if descending else '0', field=search_field, value=search_value) }}">{{ p }}</a>
+    {% elif p == 4 and page > 5 %}
+      <span style="border:none;color:var(--muted)">…</span>
+    {% endif %}
+  {% endfor %}
+  {% if page < total_pages %}
+    <a href="{{ url_for('index', page=page+1, order_by=order_by, desc='1' if descending else '0', field=search_field, value=search_value) }}">›</a>
+  {% endif %}
+  <span class="pg-info">{{ (page-1)*per_page + 1 }}–{{ [page*per_page, total]|min }} of {{ total }}</span>
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <div class="big">∅</div>
+  <p>No records found{% if search_field %} for <strong>{{ search_field }}={{ search_value }}</strong>{% endif %}.</p>
+  <a href="{{ url_for('insert') }}" class="btn btn-primary">Insert first record</a>
+</div>
+{% endif %}
+
+{% endblock %}

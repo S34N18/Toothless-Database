@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Insert{% endblock %}
+{% block topbar_title %}Insert record{% endblock %}
+{% block topbar_sub %}Add a new record to the database{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('index') }}" class="btn btn-ghost btn-sm">← Records</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 560px;">
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;">
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">Fields</label>
+        <textarea
+          class="form-control"
+          name="fields"
+          rows="8"
+          placeholder="name=Alice&#10;role=engineer&#10;level=3&#10;country=Kenya"
+          autofocus
+        >{{ prefill }}</textarea>
+        <div class="form-hint">
+          One <code style="color:var(--accent)">field=value</code> pair per line.<br>
+          Numbers are stored as integers automatically.<br>
+          Core schema fields go to real columns; extras go to the blob.
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button type="submit" class="btn btn-primary">Insert record</button>
+        <a href="{{ url_for('index') }}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  {% if db_path %}
+  <div style="margin-top:20px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-mono);font-size:12px;color:var(--muted);">
+    <div style="margin-bottom:8px;color:#555;text-transform:uppercase;letter-spacing:.07em;font-size:10px;">Quick examples</div>
+    <div style="cursor:pointer;color:var(--info);margin-bottom:4px" onclick="prefill('name=Alice\nrole=engineer\nlevel=3')">name=Alice / role=engineer / level=3</div>
+    <div style="cursor:pointer;color:var(--info);margin-bottom:4px" onclick="prefill('name=Bob\nrole=designer\nlevel=2\ncountry=Kenya')">+ with blob field country=Kenya</div>
+    <div style="cursor:pointer;color:var(--info)" onclick="prefill('name=Carol\nrole=manager\nlevel=5\nhobby=reading\ncity=Nairobi')">+ multiple blob fields</div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function prefill(text) {
+  document.querySelector('textarea[name=fields]').value = text;
+}
+</script>
+{% endblock %}

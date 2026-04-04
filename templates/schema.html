@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Schema{% endblock %}
+{% block topbar_title %}Schema{% endblock %}
+{% block topbar_sub %}Table layout and index overview{% endblock %}
+
+{% block content %}
+
+<div class="schema-col">
+
+  <div>
+    <div style="font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;">Table columns — records</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;">
+      <table class="schema-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>column</th>
+            <th>type</th>
+            <th>kind</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for col in columns %}
+          <tr>
+            <td style="color:var(--muted)">{{ col.cid }}</td>
+            <td>{{ col.name }}</td>
+            <td style="color:var(--muted)">{{ col.type }}</td>
+            <td>
+              {% if col.name == 'data' %}
+                <span class="tag tag-blob">blob</span>
+              {% elif col.name in ('id', 'created_at') %}
+                <span class="tag tag-fixed">fixed</span>
+              {% else %}
+                <span class="tag tag-core">core</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:20px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;line-height:1.7;color:var(--muted);">
+      <div style="margin-bottom:6px;">
+        <span class="tag tag-core">core</span>
+        &nbsp;Real SQLite columns — native SQL queries, ORDER BY, ranges.
+      </div>
+      <div style="margin-bottom:6px;">
+        <span class="tag tag-blob">blob</span>
+        &nbsp;JSON blob — flexible, any field name, indexed via field_index.
+      </div>
+      <div>
+        <span class="tag tag-fixed">fixed</span>
+        &nbsp;System columns — always present, managed automatically.
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div style="font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;">Blob field index</div>
+
+    {% if blob_fields %}
+      {% for field in blob_fields %}
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:14px;">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-family:var(--font-mono);font-size:13px;color:var(--accent)">{{ field }}</span>
+          <span style="font-size:11px;color:var(--muted)">{{ blob_stats[field]|length }} value(s)</span>
+        </div>
+        <table class="schema-table">
+          <thead><tr><th>value</th><th>records</th></tr></thead>
+          <tbody>
+            {% for row in blob_stats[field] %}
+            <tr>
+              <td>{{ row.value }}</td>
+              <td style="color:var(--accent)">{{ row.cnt }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;text-align:center;color:var(--muted);font-size:13px;">
+        No blob field entries yet.<br>
+        <span style="font-size:12px;">Insert records with extra fields to see them here.</span>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
